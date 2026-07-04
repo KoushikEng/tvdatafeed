@@ -128,13 +128,13 @@ class TvDatafeed:
 
     @staticmethod
     def __parse_data(raw_data, is_return_dataframe:bool) -> List[List]:
-        out = re.search('"s":\[(.+?)\}\]', raw_data).group(1)
+        out = re.search(r'"s":\[(.+?)\}\]', raw_data).group(1)
         x = out.split(',{"')
         data = list()
         volume_data = True
 
         for xi in x:
-            xi = re.split("\[|:|,|\]", xi)
+            xi = re.split(r"\[|:|,|\]", xi)
             ts = datetime.datetime.fromtimestamp(float(xi[4])) if is_return_dataframe else int(xi[4].split('.')[0])
 
             row = [ts]
@@ -282,20 +282,52 @@ class TvDatafeed:
 
         return asyncio.run(self.get_hist_async(symbols, exchange, interval, n_bars, dataFrame, fut_contract, extended_session))
 
+    def search_symbol(self, text: str, exchange: str = ''):
+        url = self.__search_url.format(text, exchange)
+
+        symbols_list = []
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Origin': 'https://www.tradingview.com',
+                'Referer': 'https://www.tradingview.com/'
+            }
+            resp = requests.get(url, headers=headers)
+
+            symbols_list = json.loads(resp.text.replace(
+                '</em>', '').replace('<em>', ''))
+        except Exception as e:
+            logger.error(e)
+
+        return symbols_list
+
+    def is_symbol_available(self, symbol: str, exchange: str = '') -> bool:
+        """
+        Checks if the exact symbol is available.
+        """
+        results = self.search_symbol(symbol, exchange)
+        for item in results:
+            if item.get('symbol', '').upper() == symbol.upper():
+                if exchange and item.get('exchange', '').upper() != exchange.upper():
+                    continue
+                return True
+        return False
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     tv = TvDatafeed()
 
-    symbols = ['SBIN', 'EICHERMOT', 'INFY', 'BHARTIARTL', 'NESTLEIND', 'ASIANPAINT', 'ITC']
-    print(tv.get_hist(symbols, "NSE", n_bars=500))
-    print(tv.get_hist("NIFTY", "NSE", fut_contract=1))
-    print(tv.get_hist(
-            "EICHERMOT",
-            "NSE",
-            interval=Interval.in_1_hour,
-            n_bars=500,
-            extended_session=False,
-            dataFrame=False
-        )
-    )
+    print(tv.is_symbol_available('SBIN', 'NSE'))
+    print(tv.is_symbol_available('SBINES', 'NSE'))
+    # symbols = ['SBIN', 'EICHERMOT', 'INFY', 'BHARTIARTL', 'NESTLEIND', 'ASIANPAINT', 'ITC']
+    # print(tv.get_hist(symbols, "NSE", n_bars=500))
+    # print(tv.get_hist("NIFTY", "NSE", fut_contract=1))
+    # print(tv.get_hist(
+    #         "EICHERMOT",
+    #         "NSE",
+    #         interval=Interval.in_1_hour,
+    #         n_bars=500,
+    #         extended_session=False,
+    #         dataFrame=False
+    #     )
+    # )
